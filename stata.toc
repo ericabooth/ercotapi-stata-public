@@ -1,0 +1,4 @@
+v 3
+d ercotapi: Texas grid data from the ERCOT Public API, loaded into Stata
+d Eric A. Booth, Texas 2036
+p ercotapi

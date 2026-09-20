@@ -1,0 +1,53 @@
+v 3
+d ercotapi: Texas grid data from the ERCOT Public API, loaded into Stata
+d
+d ercotapi pulls wholesale prices, load, generation by fuel, resource
+d outages and roughly a hundred other ERCOT published reports straight into
+d Stata's memory.
+d
+d It handles three things that are awkward to do by hand.  ERCOT
+d authenticates every request with two separate credentials, an OAuth bearer
+d token and a subscription key sent as an HTTP header, and Stata cannot set
+d custom headers.  Date filters are rejected unless sent as a From/To pair
+d whose shape the error message never names.  Reports keep only a few weeks
+d of history on the endpoint you would naturally query, and a request for
+d anything older comes back empty with no error at all.
+d
+d Subcommands:
+d     ercotapi setup                  check the install and your credentials
+d     ercotapi catalog                list the reports you can query, with
+d                                     how far back each one reaches
+d     ercotapi describe <emil-id>     show a report's tables and fields
+d     ercotapi pull <emil-id>, ...    query the live endpoint (recent dates)
+d     ercotapi archive <emil-id>, ... download the posted files (older dates)
+d
+d CREDENTIALS: never stored in this package and never typed as a Stata
+d argument.  Run  ercotapi setup, template  once and paste your three values
+d into the file it creates.  The help file explains how to register with
+d ERCOT and where the key comes from.
+d
+d NOTE ON THE PYTHON ENGINE: Stata cannot set the HTTP headers ERCOT
+d requires, so the network work happens in two Python files that use the
+d standard library only (no pip install, and Stata's own Python integration
+d does not need configuring).  net install copies only recognised
+d extensions, so those .py files are ancillary.  You do not need to fetch
+d them by hand: on the first call ercotapi_findfile looks for them on the
+d adopath, and if they are missing downloads them from this repository into
+d sysdir PLUS/e/ercotapi/ and reuses the cached copies afterwards.  Override
+d the source by setting global ercotapi_remote_base before the first call.
+d To place them yourself instead, run: net get ercotapi, from(<this URL>)
+d
+d Requires: Stata 16.0 or newer, and Python 3.8 or newer on the machine
+d
+d Author: Eric A. Booth, Texas 2036
+d Support: https://github.com/texas-2036/ercotapi-stata-public
+d
+d Distribution-Date: 20260920
+d
+f ercotapi.ado
+f ercotapi_findfile.ado
+f ercotapi_python.ado
+f ercotapi_shell.ado
+f ercotapi.sthlp
+f _ercotapi_client.py
+f _ercotapi_cli.py

@@ -1,0 +1,39 @@
+# --- Secrets: nothing resembling a credential belongs in this repository ---
+credentials.json
+.ercotapi/
+*credentials*
+*secret*
+*.env
+token*.json
+client_secret*.json
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# --- Editor / IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- Stata: logs and scratch ---
+*.log
+*.smcl
+*.stmem
+*.gph
+
+# --- Test and example output ---
+tests/output/
+*.csv
+!tests/expected/*.csv
