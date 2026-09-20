@@ -37,8 +37,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _ercotapi_client import (  # noqa: E402
     DEFAULT_CALLS_PER_MINUTE, CRED_PATH, ErcotApiError, ErcotAuthError,
     ErcotSession, build_range_params, catalog_rows, describe_report,
-    fetch_archive, get_catalog, list_archive, mask, query, write_csv,
-    __version__,
+    archive_listing_was_capped, fetch_archive, get_catalog, list_archive,
+    mask, mask_username, query, write_csv, __version__,
 )
 
 
@@ -83,12 +83,11 @@ def cmd_check(args) -> int:
     from _ercotapi_client import load_credentials
     print(f"credentials file     : {CRED_PATH}")
     cred = load_credentials()
-    source = (
-        "environment variables" if os.environ.get("ERCOT_API_KEY")
-        else "the credentials file above"
-    )
-    print(f"credentials read from: {source}")
-    print(f"  username           : {cred['username']}")
+    # load_credentials reports its own source: the environment is used only
+    # when all three variables are set, so deciding this here from one of them
+    # would name the wrong source for a half-set environment.
+    print(f"credentials read from: {cred['_source']}")
+    print(f"  username           : {mask_username(cred['username'])}")
     print(f"  subscription key   : {mask(cred['api_key'])}")
     print(f"  password           : {mask(cred['password'])}")
     session = _session(args)
@@ -115,6 +114,12 @@ def cmd_archive_list(args) -> int:
     docs = list_archive(session, args.emil, args.date_from, args.date_to,
                         max_docs=args.max_docs)
     n = write_csv(args.out, docs)
+    if archive_listing_was_capped(docs, args.max_docs):
+        print(
+            f"NOTE: this listing stopped at its ceiling of {args.max_docs} postings, so\n"
+            f"the archive may hold more than you see here. Raise --max-docs, or narrow\n"
+            f"the date range, before reading this count as the whole archive."
+        )
     if docs:
         stamps = sorted(d["post_datetime"] for d in docs if d.get("post_datetime"))
         if stamps:
@@ -156,7 +161,7 @@ def cmd_describe(args) -> int:
             rng = "YES - use From/To" if f.get("hasRange") else "no"
             print(f"    {str(f.get('name','')):<34}{str(f.get('dataType','')):<12}{rng}")
     elif not args.artifact and len(info["artifacts"]) > 1:
-        print("This report has more than one artifact; rerun with --artifact to see its fields.")
+        print("This report has more than one table. Pick one from the list above to see its fields.")
     if args.out:
         write_csv(args.out, [
             {"artifact": info["artifact"], "field": f.get("name"),

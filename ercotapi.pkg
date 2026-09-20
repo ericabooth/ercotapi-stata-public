@@ -29,18 +29,16 @@ d
 d NOTE ON THE PYTHON ENGINE: Stata cannot set the HTTP headers ERCOT
 d requires, so the network work happens in two Python files that use the
 d standard library only (no pip install, and Stata's own Python integration
-d does not need configuring).  net install copies only recognised
-d extensions, so those .py files are ancillary.  You do not need to fetch
-d them by hand: on the first call ercotapi_findfile looks for them on the
-d adopath, and if they are missing downloads them from this repository into
-d sysdir PLUS/e/ercotapi/ and reuses the cached copies afterwards.  Override
-d the source by setting global ercotapi_remote_base before the first call.
-d To place them yourself instead, run: net get ercotapi, from(<this URL>)
+d does not need configuring).  Both are declared below and net install
+d copies them along with everything else, filing them under sysdir PLUS/py/
+d where the package finds them.  One command installs the whole package.
+d For a machine that cannot reach GitHub, mirror this repository and set
+d global ercotapi_remote_base before the first call.
 d
 d Requires: Stata 16.0 or newer, and Python 3.8 or newer on the machine
 d
-d Author: Eric A. Booth, Texas 2036
-d Support: https://github.com/texas-2036/ercotapi-stata-public
+d Author: Eric A. Booth, Sr Researcher, Texas 2036
+d Support: eric.a.booth@gmail.com
 d
 d Distribution-Date: 20260920
 d

@@ -34,9 +34,21 @@ program define ercotapi_python, rclass
         local k = `k' + 1
         local c`k' `""`python'""'
     }
-    if `"$ercotapi_python"' != "" {
+    local g `"$ercotapi_python"'
+    if `"`g'"' != "" {
+        * A value this program stored earlier is already shell-ready. A value
+        * the user typed by hand is usually a bare path, and this author's own
+        * machines have spaces in nearly every path, so an unquoted one would
+        * be word-split by the shell and the search would fall through to a
+        * different interpreter without saying so. Quote a bare path that
+        * names a real file, and leave anything else alone so a command plus
+        * argument, such as the Windows "py -3", still works.
+        if substr(`"`g'"', 1, 1) != `"""' {
+            capture confirm file `"`g'"'
+            if !_rc local g `""`g'""'
+        }
         local k = `k' + 1
-        local c`k' `"$ercotapi_python"'
+        local c`k' `"`g'"'
     }
     * If Stata's own Python integration is already pointed at an interpreter,
     * reuse it: the user has already told Stata which Python they want.
@@ -101,11 +113,18 @@ program define ercotapi_python, rclass
         exit 601
     }
 
-    * A Python 2 interpreter answers the probe and then fails on the engine,
-    * so check the version rather than trusting the name.
+    * An old interpreter answers the probe and then fails inside the engine
+    * with a message the user cannot act on, so check the version here and say
+    * plainly what is wrong. The minimum checked matches the one documented.
     local dot = strpos("`winver'", ".")
     local major = cond(`dot' > 1, real(substr("`winver'", 1, `dot' - 1)), .)
-    if !missing(`major') & `major' < 3 {
+    local rest  = substr("`winver'", `dot' + 1, .)
+    local dot2  = strpos("`rest'", ".")
+    local minor = cond(`dot2' > 1, real(substr("`rest'", 1, `dot2' - 1)), real("`rest'"))
+    local tooold = 0
+    if !missing(`major') & `major' < 3                          local tooold 1
+    if !missing(`major') & !missing(`minor') & `major' == 3 & `minor' < 8 local tooold 1
+    if `tooold' {
         display as error "ercotapi: `winner' reports Python `winver'; version 3.8 or newer is required."
         display as error `"  Point ercotapi at a newer interpreter: global ercotapi_python "/path/to/python3""'
         exit 601

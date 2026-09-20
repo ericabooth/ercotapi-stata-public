@@ -1,8 +1,8 @@
 *! ercotapi v1.0.0  2026-09-20
 *! Pull Texas grid data from the ERCOT Public API straight into Stata.
 *!
-*! Eric A. Booth, Texas 2036.  MIT licensed.  See ercotapi.sthlp for the help
-*! file and README.md for how to register with ERCOT and get a key.
+*! Eric A. Booth, Sr Researcher, Texas 2036.  MIT licensed.  See ercotapi.sthlp
+*! for the help file and README.md for how to register with ERCOT and get a key.
 *!
 *! SUBCOMMANDS
 *!     ercotapi setup                  check the install and the credentials
@@ -71,7 +71,11 @@ program define ercotapi_version, rclass
     capture ercotapi_findfile, quietly
     if !_rc display as text "  Python engine: " as result "`r(dir)'"
     capture ercotapi_python
-    if !_rc display as text "  Python:        " as result `"`r(python)'"' as text "  (`r(pyver)')"
+    if !_rc {
+        local pyv `"`r(python)'"'
+        local pyshow : subinstr local pyv `"""' "", all
+        display as text "  Python:        " as result `"`pyshow'"' as text "  (`r(pyver)')"
+    }
     return local version "1.0.0"
 end
 
@@ -91,7 +95,10 @@ program define ercotapi_setup, rclass
     * ---- 1. the Python interpreter ----------------------------------------
     ercotapi_python, python(`"`python'"')
     local py `"`r(python)'"'
-    display as text "Python interpreter   : " as result `"`py'"' as text " (version `r(pyver)')"
+    * r(python) is shell-ready, so a path comes back already quoted. Strip the
+    * quoting for display: the reader wants the path, not the escaping.
+    local pyshow : subinstr local py `"""' "", all
+    display as text "Python interpreter   : " as result `"`pyshow'"' as text " (version `r(pyver)')"
 
     * ---- 2. the engine files ----------------------------------------------
     ercotapi_findfile
@@ -296,6 +303,15 @@ program define ercotapi_archive, rclass
         display as text "ercotapi archive: listed " as result "`=_N'" as text " postings."
         display as text "  post_datetime is when ERCOT published each file. Sort on it to see how"
         display as text "  far back the archive goes, then download a window with from() and to()."
+        * A listing truncates at its ceiling rather than refusing, unlike a
+        * download, so a count sitting exactly on the ceiling has to say so or
+        * the reader will take it for the whole archive.
+        if _N >= `md' {
+            display as text ""
+            display as text "  Note: this listing stopped at its ceiling of `md' postings, so the archive"
+            display as text "  may hold more than you see here. Raise maxdocs() or narrow the dates"
+            display as text "  before reading this count as the whole archive."
+        }
     }
     else {
         capture label variable source_doc_id        "Archive document this row came from"
@@ -359,10 +375,30 @@ program define ercotapi_describe, rclass
     display as text "    build the From/To pair for you."
 
     if "`clear'" != "" {
+        * A report with several tables and no artifact() names no fields, so the
+        * engine writes a header-less, zero-byte CSV. -confirm file- is happy
+        * with that and -import delimited- returns rc=0 having loaded nothing,
+        * which would wipe the data in memory and then announce a field list
+        * that does not exist. Check the file actually has a line in it.
+        local hasfields 0
         capture confirm file `"`csv'"'
         if !_rc {
+            tempname dfh
+            capture file open `dfh' using `"`csv'"', read text
+            if !_rc {
+                file read `dfh' dline
+                if r(eof) == 0 & trim(`"`macval(dline)'"') != "" local hasfields 1
+                file close `dfh'
+            }
+        }
+        if `hasfields' {
             quietly import delimited using `"`csv'"', varnames(1) case(preserve) clear
             display as text "  Field list loaded into memory (`=_N' fields)."
+        }
+        else {
+            display as text "  Nothing loaded, and the data in memory were left alone:"
+            display as text "  this report names no fields until you pick one of its tables."
+            display as text `"  Rerun with artifact(), for example: ercotapi describe `emil', artifact(<slug>) clear"'
         }
     }
     if `"`saving'"' != "" display as text `"  Field list written to: `csv'"'

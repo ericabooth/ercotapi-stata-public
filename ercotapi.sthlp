@@ -27,7 +27,7 @@ Check the installation and your credentials
 
 {p 8 17 2}
 {cmd:ercotapi setup}
-[{cmd:,} {opt template} {opt offline} {opt py:thon(string)} {opt verbose}]
+[{cmd:,} {opt template} {opt offline} {opt python(string)} {opt verbose}]
 
 {pstd}
 List the reports you can query
@@ -35,7 +35,7 @@ List the reports you can query
 {p 8 17 2}
 {cmd:ercotapi catalog}
 [{cmd:,} {opt clear} {opt saving(filename)} {opt replace} {opt rate(#)}
-{opt py:thon(string)} {opt verbose}]
+{opt python(string)} {opt verbose}]
 
 {pstd}
 Show a report's tables and fields
@@ -43,7 +43,7 @@ Show a report's tables and fields
 {p 8 17 2}
 {cmd:ercotapi describe} {it:emil_id}
 [{cmd:,} {opt artifact(name)} {opt clear} {opt saving(filename)} {opt replace}
-{opt rate(#)} {opt py:thon(string)} {opt verbose}]
+{opt rate(#)} {opt python(string)} {opt verbose}]
 
 {pstd}
 Query the live endpoint, for recent dates
@@ -52,8 +52,8 @@ Query the live endpoint, for recent dates
 {cmd:ercotapi pull} {it:emil_id}{cmd:,} {opt artifact(name)}
 [{opt field(name)} {opt from(date)} {opt to(date)} {opt param(string)}
 {opt pagesize(#)} {opt rate(#)} {opt clear} {opt saving(filename)}
-{opt replace} {opt noimport} {opt stringcols(varlist)}
-{opt py:thon(string)} {opt verbose}]
+{opt replace} {opt noimport} {opt stringcols(numlist|_all)}
+{opt python(string)} {opt verbose}]
 
 {pstd}
 Download the posted files, for older dates
@@ -62,7 +62,7 @@ Download the posted files, for older dates
 {cmd:ercotapi archive} {it:emil_id}{cmd:,}
 [{opt from(date)} {opt to(date)} {opt list} {opt maxdocs(#)}
 {opt rate(#)} {opt clear} {opt saving(filename)} {opt replace}
-{opt noimport} {opt stringcols(varlist)} {opt py:thon(string)} {opt verbose}]
+{opt noimport} {opt stringcols(numlist|_all)} {opt python(string)} {opt verbose}]
 
 {pstd}
 Report the installed version
@@ -196,7 +196,9 @@ exists, {opt template} leaves it alone rather than overwriting it.
 {pstd}
 If you would rather keep secrets out of files, or you are running on a server,
 set {cmd:ERCOT_API_KEY}, {cmd:ERCOT_USERNAME} and {cmd:ERCOT_PASSWORD} before
-Stata starts. They take precedence over the file when both are present.
+Stata starts. Set all three: the environment is used in preference to the file
+only when all three are present, and if any one is missing every value comes
+from the file instead.
 
 {dlgtab:What not to do}
 
@@ -265,8 +267,10 @@ Use it for any field {cmd:describe} marks as not accepting a range. Values
 cannot contain spaces.
 
 {phang}
-{opt pagesize(#)} sets rows per request. The default, 5000, is the maximum the
-API accepts, and lowering it only makes a pull slower.
+{opt pagesize(#)} sets rows per request. The default is 5000, which keeps each
+response a manageable size. ERCOT accepts larger pages, so raising it spends
+fewer requests against the rate limit on a big pull; lowering it only makes a
+pull slower.
 
 {phang}
 {opt rate(#)} caps requests per minute. The default is 25. ERCOT throttles by
@@ -285,9 +289,11 @@ specified.
 Requires {opt saving()}. Useful inside a loop that assembles many months.
 
 {phang}
-{opt stringcols(varlist)} is passed to
-{help import delimited:import delimited}. Use it to stop Stata from reading an
-identifier with leading zeros as a number.
+{opt stringcols(numlist|_all)} is passed straight to
+{help import delimited:import delimited}, which identifies columns by position
+rather than by name. Use it to stop Stata from reading an identifier with
+leading zeros as a number: {cmd:stringcols(3)} keeps the third column as text,
+and {cmd:stringcols(_all)} keeps every column as text.
 
 {dlgtab:archive}
 
@@ -301,11 +307,17 @@ specified.
 dates, that is the full span, which tells you how far back the report goes.
 
 {phang}
-{opt maxdocs(#)} caps how many postings a single call will download. The
-default is 400 for a download and 2000 for a listing. Each posting is a
-separate request, so the ceiling exists to stop an accidental year-long window
-from running for an hour. A range above the ceiling is refused with a message
-rather than silently truncated.
+{opt maxdocs(#)} caps how many postings a single call will handle. The default
+is 400 for a download and 2000 for a listing. Each posting is a separate
+request, so the ceiling exists to stop an accidental year-long window from
+running for an hour.
+
+{phang2}
+The two paths hit that ceiling differently. A {it:download} above the ceiling
+is refused with a message rather than returning part of the range. A
+{it:listing} stops at the ceiling and says so, so a count that comes back
+exactly at {opt maxdocs()} means the archive probably holds more. Raise it, or
+narrow the dates, before reading that count as the whole archive.
 
 {phang}
 {opt clear}, {opt saving()}, {opt replace}, {opt noimport} and
@@ -532,9 +544,10 @@ Python 3.8 or newer, or set
 
 {phang}
 {bf:the Python engine files could not be found or downloaded}{break}
-{cmd:net install} does not copy {cmd:.py} files and GitHub was unreachable. Run
-{cmd:net get ercotapi, from(...)}, or clone the repository and add it with
-{helpb adopath}.
+The engine did not arrive with the install, or only half of it did. Reinstall
+with the {cmd:net install} line under
+{help ercotapi##install:Requirements and installation} below, or clone the
+repository and add it with {helpb adopath}.
 
 {phang}
 {bf:No ERCOT credentials found}{break}
@@ -590,42 +603,51 @@ own Python integration does not have to be configured, and no pip packages are
 needed.
 
 {pstd}
-To install:
+From GitHub:
 
-{p 8 12 2}{cmd:. net install ercotapi, from("https://raw.githubusercontent.com/texas-2036/ercotapi-stata-public/main/") replace}{p_end}
+{p 8 12 2}{cmd:. net install ercotapi, from("https://raw.githubusercontent.com/ericabooth/ercotapi-stata-public/main/") replace force}{p_end}
+{p 8 12 2}{cmd:. help ercotapi}{p_end}
 
 {pstd}
-Stata's {helpb net install} copies only the file types it recognises, and a
-{cmd:.py} file is not one of them. You do not have to do anything about that:
-on its first call {cmd:ercotapi} notices the engine is missing and downloads it
-into {cmd:PLUS/e/ercotapi/}, where later calls reuse it. To fetch the files up
-front instead, use {cmd:net get ercotapi, from(...)}. If your machine cannot
-reach GitHub, mirror the repository and set
-{cmd:global ercotapi_remote_base "https://your.mirror/ercotapi/"} before the
-first call.
+That one command copies everything the package needs, the command and its
+helper ado files, the help file, and the Python engine, straight to your
+adopath. Stata files the {cmd:.py} files under {cmd:PLUS/py/} and
+{helpb findfile} looks there, so there is no manual {helpb adopath} step and
+nothing to install through pip. Run the same line again whenever you want to
+update.
+
+{pstd}
+Then confirm it is wired up:
+
+{p 8 12 2}{cmd:. ercotapi setup}{p_end}
 
 {pstd}
 Working from a clone instead:
 
 {p 8 12 2}{cmd:. adopath ++ "/full/path/to/ercotapi-stata-public"}{p_end}
 
+{pstd}
+If a machine cannot reach GitHub at all, mirror the repository and set
+{cmd:global ercotapi_remote_base "https://your.mirror/ercotapi/"} before the
+first call.
+
 
 {marker author}{...}
 {title:Author}
 
 {pstd}
-Eric A. Booth, Texas 2036{break}
-{browse "https://github.com/texas-2036/ercotapi-stata-public"}
+Eric A. Booth, Sr Researcher, Texas 2036 (eric.a.booth@gmail.com){break}
+{browse "https://github.com/ericabooth/ercotapi-stata-public"}
 
 {pstd}
-Released under the MIT Licence. Issues and pull requests are welcome. If you
-hit an ERCOT behaviour this package does not handle, an issue with the report
-id, the options you passed, and the message you got is enough to work from.
+MIT-licensed. Issues and pull requests are welcome. If you hit an ERCOT
+behaviour this package does not handle, an issue with the report id, the
+options you passed, and the message you got is enough to work from.
 
 {pstd}
 If this package supports published work, please cite it as: Booth, E. A.
 (2026). {it:ercotapi: ERCOT Public API data in Stata} (version 1.0.0) [Stata
-package]. Texas 2036.
+package]. {browse "https://github.com/ericabooth/ercotapi-stata-public"}
 
 
 {title:Also see}

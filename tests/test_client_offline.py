@@ -252,11 +252,24 @@ class TestMask(unittest.TestCase):
         self.assertIn("mnop", out)
         self.assertIn("16", out)
 
-    def test_a_short_secret_reveals_nothing(self):
-        self.assertEqual(C.mask("abc"), "<set>")
+    def test_a_short_secret_reveals_none_of_itself(self):
+        # Showing the last four characters of a short password prints most of
+        # it, and a setup report is exactly what people paste into a bug
+        # report. Anything under twelve characters shows its length only.
+        for secret in ("abc", "abcd", "hunter2", "abcdefghijk"):
+            out = C.mask(secret)
+            self.assertNotIn(secret[-4:], out, f"mask leaked the tail of {secret!r}")
+            self.assertIn(str(len(secret)), out)
 
     def test_an_empty_secret_does_not_crash(self):
-        self.assertEqual(C.mask(""), "<set>")
+        self.assertEqual(C.mask(""), "<not set>")
+
+    def test_a_long_secret_still_shows_enough_to_identify_it(self):
+        # The point of the tail is letting someone confirm which of two keys
+        # is configured, so a real 32-character key must keep showing it.
+        out = C.mask("0123456789abcdef0123456789abcdef")
+        self.assertIn("cdef", out)
+        self.assertIn("32", out)
 
 
 class TestPublicConfigIsNotSecret(unittest.TestCase):

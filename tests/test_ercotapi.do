@@ -98,6 +98,22 @@ local dot = strpos("`pyver'", ".")
 local pymajor = cond(`dot' > 1, real(substr("`pyver'", 1, `dot' - 1)), 0)
 tcheck `=(`pymajor' >= 3)' "the interpreter reports Python 3 or newer (`pyver')"
 
+* A path this program stored is already quoted for the shell. A path the user
+* types into the global by hand is bare, and on a machine whose paths contain
+* spaces an unquoted one is word-split: the probe fails and the search falls
+* through to a different interpreter without saying so. Setting the global to
+* the bare form and finding the same interpreter again is what proves the
+* quoting survives the round trip.
+capture ercotapi_python
+local found `"`r(python)'"'
+local bare : subinstr local found `"""' "", all
+global ercotapi_python `"`bare'"'
+capture ercotapi_python
+local again `"`r(python)'"'
+local bare2 : subinstr local again `"""' "", all
+tcheck `=("`bare2'" == "`bare'")' "a hand-set interpreter path round-trips through the search"
+global ercotapi_python ""
+
 
 * ===========================================================================
 tsection "2. Bad input is refused before a request is spent"

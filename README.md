@@ -26,28 +26,39 @@ under your own registered account.
 
 **Contents**
 
-- [What you need before you start](#what-you-need-before-you-start)
+- [Install](#install)
 - [Getting an ERCOT API key](#getting-an-ercot-api-key)
 - [Storing your credentials](#storing-your-credentials)
-- [Installing the package](#installing-the-package)
 - [Your first pull](#your-first-pull)
 - [The commands](#the-commands)
 - [Two traps worth knowing about](#two-traps-worth-knowing-about)
 - [Worked examples](#worked-examples)
 - [Using the Python module on its own](#using-the-python-module-on-its-own)
 - [When something goes wrong](#when-something-goes-wrong)
-- [What is in the package](#what-is-in-the-package)
-- [Contributing, citing, licence](#contributing-citing-licence)
+- [What is in the repository](#what-is-in-the-repository)
+- [Author and license](#author-and-license)
 
 ---
 
-## What you need before you start
+## Install
 
-| You need | Notes |
-|---|---|
-| Stata 16.0 or newer | Earlier versions cannot run the command. |
-| Python 3.8 or newer, installed on the machine | You never call Python yourself. Stata's own Python integration does **not** have to be configured, and you do not need to `pip install` anything: the engine uses the Python standard library only. |
-| A free ERCOT Public API account | The next section walks through it. |
+```stata
+net install ercotapi, from("https://raw.githubusercontent.com/ericabooth/ercotapi-stata-public/main/") replace force
+help ercotapi
+```
+
+That one command copies everything the package needs, the command and its
+helper ado files, the help file, and the Python engine, straight to your
+adopath. Stata files the `.py` files under `PLUS/py/` and the package looks for
+them there, so there is no manual `adopath` step. Run the same line again
+whenever you want to update.
+
+Requires Stata 16.0 or newer, and Python 3.8 or newer on the machine. Nothing
+to pip install, ever: the engine uses the Python standard library only, and
+Stata's own Python integration does not have to be configured.
+
+You also need a free ERCOT Public API account, which the next section walks
+through.
 
 Why Python is in the picture at all: every ERCOT request carries an OAuth
 bearer token and an Azure subscription key sent as an HTTP header. Stata's own
@@ -55,6 +66,36 @@ file and URL commands cannot set custom headers, so the network work happens in
 a small Python module that ships with this package. `ercotapi` finds an
 interpreter, runs the query, and reads the result into memory. From where you
 sit it is a Stata command.
+
+### Confirming the install
+
+```stata
+ercotapi setup
+```
+
+That reports which Python interpreter it found, where the engine files are,
+where it read your credentials from, and whether ERCOT accepted the sign-in.
+The key and password are shown as a length and last four characters, and the
+account only partly, so the report is safe to paste into a bug report. Run it
+once after installing and again any time something stops working.
+
+### Working from a clone instead
+
+```bash
+git clone https://github.com/ericabooth/ercotapi-stata-public.git
+```
+
+```stata
+adopath ++ "/full/path/to/ercotapi-stata-public"
+```
+
+Everything sits in one folder, so the clone needs no build step. If a machine
+cannot reach GitHub at all, mirror the repository somewhere it can and point
+the package there before your first call:
+
+```stata
+global ercotapi_remote_base "https://your.mirror/ercotapi/"
+```
 
 ---
 
@@ -155,7 +196,10 @@ export ERCOT_USERNAME="you@example.org"
 export ERCOT_PASSWORD="..."
 ```
 
-Environment variables take precedence over the file when both are present.
+Set all three. The environment is used in preference to the file only when all
+three variables are present; if any one of them is missing, every value comes
+from the file instead. `ercotapi setup` reports which of the two it actually
+read.
 
 ### What not to do
 
@@ -163,56 +207,6 @@ Do not put your key in a do-file, and do not commit one to a repository. If you
 work on a shared drive, remember that the credentials file lives in your home
 directory rather than in the project folder, which is the point: the project
 can be shared and the credentials cannot.
-
----
-
-## Installing the package
-
-### From GitHub, inside Stata
-
-```stata
-net install ercotapi, from("https://raw.githubusercontent.com/texas-2036/ercotapi-stata-public/main/") replace
-```
-
-Stata's `net install` copies only the file types it recognises, and a `.py`
-file is not one of them. You do not have to do anything about that: the first
-time you run any `ercotapi` command, it notices the Python engine is missing
-and downloads the two files into `PLUS/e/ercotapi/`, where later calls reuse
-them. If you would rather fetch them up front:
-
-```stata
-net get ercotapi, from("https://raw.githubusercontent.com/texas-2036/ercotapi-stata-public/main/")
-```
-
-If your machine cannot reach GitHub, mirror the repository somewhere it can
-and point the package there before your first call:
-
-```stata
-global ercotapi_remote_base "https://your.mirror/ercotapi/"
-```
-
-### From a clone
-
-```bash
-git clone https://github.com/texas-2036/ercotapi-stata-public.git
-```
-
-```stata
-adopath ++ "/full/path/to/ercotapi-stata-public"
-```
-
-Everything sits in one folder, so the clone needs no build step.
-
-### Confirming the install
-
-```stata
-ercotapi setup
-```
-
-That reports which Python interpreter it found, where the engine files are,
-which credentials it read (masked, never in full), and whether ERCOT accepted
-the sign-in. Run it once after installing and again any time something stops
-working.
 
 ---
 
@@ -246,8 +240,8 @@ next section takes up.
 | Command | What it does |
 |---|---|
 | `ercotapi setup` | Checks Python, the engine files, and your credentials, then signs in to prove it works. Add `template` to create the credentials file; add `offline` to skip the sign-in. |
-| `ercotapi catalog` | Loads one row per queryable table across every report your subscription can see. |
-| `ercotapi describe <id>` | Shows a report's tables and, for one table, every field with its type and whether it accepts a date range. |
+| `ercotapi catalog` | Loads one row per queryable table across every report your subscription can see, plus a row with a blank `artifact` for each report that has no queryable table but may still have an archive. |
+| `ercotapi describe <id>` | Shows a report's tables and, for one table, every field with its type and whether it accepts a range. |
 | `ercotapi pull <id>` | Queries the live endpoint and loads the rows. This is the command for recent dates. |
 | `ercotapi archive <id>` | Downloads the original files ERCOT posted, which reach back years, and stitches them into one table. This is the command for older dates. |
 | `ercotapi version` | Reports the installed version and what it found on the machine. |
@@ -366,9 +360,11 @@ count
 ```
 
 If that count is larger than you want to sit through, narrow the window.
-`ercotapi archive` stops at 400 postings by default and tells you rather than
-quietly returning part of the range; raise the ceiling with `maxdocs()` when
-you mean it.
+The two paths treat their ceiling differently. A listing stops at 2,000
+postings and says so, meaning a count that comes back at exactly that number is
+not the whole archive. A download stops at 400 and refuses the range outright
+rather than returning part of it. Raise either with `maxdocs()` when you mean
+it.
 
 ### Keep the CSV as well as the data
 
@@ -440,7 +436,7 @@ python3 _ercotapi_cli.py pull --emil np4-190-cd --artifact dam_stlmnt_pnt_prices
 | What you see | What it means | What to do |
 |---|---|---|
 | `no working Python 3 interpreter was found` | Python is missing, or it is installed somewhere Stata's shell does not look. | Install Python 3.8+, or set `global ercotapi_python "/full/path/to/python3"`. |
-| `the Python engine files could not be found or downloaded` | `net install` did not copy the `.py` files and GitHub was unreachable. | Run `net get ercotapi, from(...)`, or clone the repo and `adopath ++` it. |
+| `the Python engine files could not be found or downloaded` | The engine did not arrive with the install, or only half of it did. | Re-run the `net install` line at the top, or clone the repo and `adopath ++` it. |
 | `No ERCOT credentials found` | Neither the environment variables nor the credentials file is set. | Run `ercotapi setup, template` and fill in the file. |
 | `ERCOT rejected the sign-in (HTTP 400)` | Wrong username or password. This is about the account, not the key. | Sign in at apiexplorer.ercot.com by hand to confirm the password, then update the credentials file. |
 | `ERCOT returned 401 twice` | The subscription key is wrong, or the subscription does not cover this product. | Check the Primary key on your Profile page, and that the subscription is active. |
@@ -473,35 +469,44 @@ If you know your own account's limit differs, raise it with `rate()`.
 
 ---
 
-## What is in the package
+## What is in the repository
+
+These seven are declared in `ercotapi.pkg` and are what `net install` copies:
 
 | File | Role |
 |---|---|
 | `ercotapi.ado` | The command you type, and its subcommands. |
-| `ercotapi_findfile.ado` | Finds the Python engine, and downloads it on first use if `net install` could not copy it. |
+| `ercotapi_findfile.ado` | Finds the Python engine, and fetches it if an install left it behind. |
 | `ercotapi_python.ado` | Works out which Python interpreter to use and proves it runs. |
 | `ercotapi_shell.ado` | Runs one engine command and reads back its result. |
 | `ercotapi.sthlp` | The help file. |
 | `_ercotapi_client.py` | The client: auth, rate limiting, pagination, the archive. Usable on its own. |
 | `_ercotapi_cli.py` | The command line the Stata side drives. |
-| `tests/` | Test scripts and how to run them. |
+
+The rest stays in the repository and is not copied to your adopath:
+
+| File | Role |
+|---|---|
+| `ercotapi.pkg`, `stata.toc` | What `net install` reads to know which files to copy. |
+| `tests/` | Test scripts and how to run them. Clone the repository to run them. |
+| `LICENSE`, `README.md` | This file, and the licence. |
 
 ---
 
-## Contributing, citing, licence
+## Author and license
+
+Eric A. Booth, Sr Researcher, Texas 2036 (eric.a.booth@gmail.com). MIT-licensed.
+See [LICENSE](LICENSE).
 
 Issues and pull requests are welcome at
-<https://github.com/texas-2036/ercotapi-stata-public>. If you hit an ERCOT
+<https://github.com/ericabooth/ercotapi-stata-public>. If you hit an ERCOT
 behaviour this package does not handle, an issue with the report id, the
 options you passed, and the message you got is enough to work from.
 
 If this package supports published work, please cite it:
 
 > Booth, E. A. (2026). *ercotapi: ERCOT Public API data in Stata* (version
-> 1.0.0) [Stata package]. Texas 2036.
-> https://github.com/texas-2036/ercotapi-stata-public
-
-Released under the MIT Licence. See [LICENSE](LICENSE).
+> 1.0.0) [Stata package]. https://github.com/ericabooth/ercotapi-stata-public
 
 The data are ERCOT's and their terms govern their use. This package is an
 independent client and carries no endorsement from ERCOT.

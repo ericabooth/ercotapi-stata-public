@@ -99,7 +99,7 @@ TOKEN_URL = (
 CLIENT_ID = "fec253ea-0d06-4272-a5e6-b478baeecd70"
 BASE_URL = "https://api.ercot.com/api/public-reports"
 
-USER_AGENT = f"ercotapi-stata/{__version__} (+https://github.com/texas-2036/ercotapi-stata-public)"
+USER_AGENT = f"ercotapi-stata/{__version__} (+https://github.com/ericabooth/ercotapi-stata-public)"
 
 CRED_PATH = os.path.join(os.path.expanduser("~"), ".ercotapi", "credentials.json")
 
@@ -126,9 +126,19 @@ class ErcotApiError(RuntimeError):
 def load_credentials(explicit: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Resolve credentials from an explicit dict, the environment, or the
     config file, in that order. Raises with a message that tells the reader
-    exactly what to do rather than just reporting a missing key."""
+    exactly what to do rather than just reporting a missing key.
+
+    The returned dict carries a `_source` key naming where the values actually
+    came from. Callers that report the source must read that rather than
+    re-deriving it, because the environment is used only when all three
+    variables are set: with one of them missing, every value comes from the
+    file instead, and a caller checking a single variable would name the wrong
+    source.
+    """
     if explicit and all(explicit.get(k) for k in ("api_key", "username", "password")):
-        return dict(explicit)
+        out = dict(explicit)
+        out["_source"] = "the values passed in"
+        return out
 
     env = {
         "api_key": os.environ.get("ERCOT_API_KEY", "").strip(),
@@ -136,6 +146,7 @@ def load_credentials(explicit: Optional[Dict[str, str]] = None) -> Dict[str, str
         "password": os.environ.get("ERCOT_PASSWORD", "").strip(),
     }
     if all(env.values()):
+        env["_source"] = "environment variables"
         return env
 
     if os.path.exists(CRED_PATH):
@@ -154,7 +165,9 @@ def load_credentials(explicit: Optional[Dict[str, str]] = None) -> Dict[str, str
                 f"{CRED_PATH} is missing: {', '.join(missing)}. "
                 'The file needs all three of api_key, username, password.'
             )
-        return {k: str(cfg[k]).strip() for k in ("api_key", "username", "password")}
+        out = {k: str(cfg[k]).strip() for k in ("api_key", "username", "password")}
+        out["_source"] = CRED_PATH
+        return out
 
     raise ErcotAuthError(
         "No ERCOT credentials found.\n"
@@ -168,9 +181,30 @@ def load_credentials(explicit: Optional[Dict[str, str]] = None) -> Dict[str, str
 
 
 def mask(secret: str) -> str:
-    """Render a secret safely for logs: length plus last four characters."""
+    """Render a secret safely for a log: its length, and the last four
+    characters only when the secret is long enough that four characters give
+    little away. Showing the tail of a short password would print most of it,
+    and a setup report is exactly the thing people paste into a bug report.
+    """
     s = str(secret or "")
-    return f"<len {len(s)}, ends {s[-4:]}>" if len(s) >= 4 else "<set>"
+    if not s:
+        return "<not set>"
+    if len(s) < 12:
+        return f"<len {len(s)}, too short to show any of it>"
+    return f"<len {len(s)}, ends {s[-4:]}>"
+
+
+def mask_username(username: str) -> str:
+    """Show enough of the registered email to tell two accounts apart, without
+    printing a working address. The setup report is the output people paste
+    into a public issue, so it should not carry one."""
+    u = str(username or "").strip()
+    if not u:
+        return "<not set>"
+    local, at, domain = u.partition("@")
+    if not at:
+        return f"{local[:2]}***" if len(local) > 2 else "***"
+    return f"{local[:2]}***@{domain}" if len(local) > 2 else f"***@{domain}"
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +347,8 @@ class ErcotSession:
             raise ErcotAuthError(
                 f"ERCOT rejected the sign-in (HTTP {exc.code}). This is almost always a "
                 f"wrong username or password, not a wrong subscription key. "
-                f"Username used: {self.cred['username']!r}. Server said: {detail}"
+                f"Username used: {mask_username(self.cred['username'])}. "
+                f"Server said: {detail}"
             ) from exc
         token = payload.get("id_token") or payload.get("access_token")
         if not token:
@@ -630,6 +665,14 @@ def list_archive(session: ErcotSession, emil_id: str,
     if len(docs) > max_docs:
         docs = docs[:max_docs]
     return docs
+
+
+def archive_listing_was_capped(docs: List[dict], max_docs: int) -> bool:
+    """True when a listing came back exactly at its ceiling, which means the
+    archive probably holds more. A listing truncates rather than refusing,
+    unlike a download, so the caller has to say so or the reader will take a
+    capped count for the whole archive."""
+    return len(docs) >= max_docs
 
 
 def read_archive_zip(blob: bytes, doc: dict) -> List[dict]:
