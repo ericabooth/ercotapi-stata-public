@@ -17,9 +17,7 @@ documentation suggests, and most of the difficulty is undocumented. The
 authentication takes two separate credentials. Date filters are rejected
 unless you send them in a shape the error message never names. Reports keep
 only a few weeks of history on the endpoint you would naturally query, and a
-request for anything older comes back empty with no error at all. Each of
-those cost us an afternoon; this package handles all three so they cost you
-nothing.
+request for anything older comes back empty with no error at all. 
 
 `ercotapi` is not affiliated with or endorsed by ERCOT. It reads a public API
 under your own registered account.
@@ -47,7 +45,7 @@ net install ercotapi, from("https://raw.githubusercontent.com/ericabooth/ercotap
 help ercotapi
 ```
 
-That one command copies everything the package needs, the command and its
+That  command copies everything the package needs, the command and its
 helper ado files, the help file, and the Python engine, straight to your
 adopath. Stata files the `.py` files under `PLUS/py/` and the package looks for
 them there, so there is no manual `adopath` step. Run the same line again
@@ -73,7 +71,7 @@ sit it is a Stata command.
 ercotapi setup
 ```
 
-That reports which Python interpreter it found, where the engine files are,
+Reports which Python interpreter it found, where the engine files are,
 where it read your credentials from, and whether ERCOT accepted the sign-in.
 The key and password are shown as a length and last four characters, and the
 account only partly, so the report is safe to paste into a bug report. Run it
