@@ -87,7 +87,7 @@ import urllib.request
 import zipfile
 from typing import Any, Dict, List, Optional
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 # These three are ERCOT's own public settings, identical for every user of the
 # API. They are configuration, not secrets, and are published in ERCOT's
@@ -735,6 +735,9 @@ def fetch_archive(session: ErcotSession, emil_id: str,
 def write_csv(path: str, rows: List[dict]) -> int:
     """Write rows to CSV using the union of keys, in first-seen order."""
     import csv
+    # Expand a leading ~ here too, so a caller that passes one gets the home
+    # folder rather than a literal "~" directory under the working directory.
+    path = os.path.expanduser(path)
     directory = os.path.dirname(os.path.abspath(path))
     if directory:
         os.makedirs(directory, exist_ok=True)

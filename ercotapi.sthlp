@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.0.0  20sep2026}{...}
+{* *! version 1.0.1  09nov2026}{...}
 {viewerjumpto "Syntax" "ercotapi##syntax"}{...}
 {viewerjumpto "Description" "ercotapi##description"}{...}
 {viewerjumpto "Getting an ERCOT API key" "ercotapi##key"}{...}
@@ -230,7 +230,11 @@ when you want to confirm the Python side works before you have a key.
 that loads a new dataset.
 
 {phang}
-{opt saving(filename)} also keeps the underlying CSV at {it:filename}.
+{opt saving(filename)} also keeps the underlying CSV at {it:filename}. A
+leading {cmd:~} means your home folder, and a relative name is taken relative to
+the current working directory. The full path is resolved before anything is
+written, and the "CSV kept at" line reports it. The same applies to
+{opt saving()} on every subcommand.
 
 {phang}
 {opt replace} allows {opt saving()} to overwrite an existing file.
@@ -646,7 +650,7 @@ options you passed, and the message you got is enough to work from.
 
 {pstd}
 If this package supports published work, please cite it as: Booth, E. A.
-(2026). {it:ercotapi: ERCOT Public API data in Stata} (version 1.0.0) [Stata
+(2026). {it:ercotapi: ERCOT Public API data in Stata} (version 1.0.1) [Stata
 package]. {browse "https://github.com/ericabooth/ercotapi-stata-public"}
 
 

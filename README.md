@@ -375,6 +375,10 @@ ercotapi pull np4-190-cd, artifact(dam_stlmnt_pnt_prices) ///
 Add `noimport` to write the CSV and leave memory untouched, which is useful
 inside a loop that assembles many months.
 
+`saving()` accepts a leading `~` for your home folder, and a relative name is
+taken relative to Stata's working directory. The command resolves the full path
+before anything is written and prints it on the "CSV kept at" line.
+
 ### Record where the data came from
 
 Every successful `pull` and `archive` writes its own provenance into the
@@ -389,7 +393,7 @@ char list _dta[]
 _dta:
   1.  ERCOT Public API, report np4-190-cd, table dam_stlmnt_pnt_prices,
       deliveryDate from 2026-09-19 to 2026-09-19; retrieved 20 Sep 2026 by
-      ercotapi 1.0.0
+      ercotapi 1.0.1
 ```
 
 Save the `.dta` and the note travels with it, which means a file found on a
@@ -491,6 +495,15 @@ The rest stays in the repository and is not copied to your adopath:
 
 ---
 
+## Changes
+
+- 1.0.1 (9 Nov 2026): `saving("~/file.csv")` now writes to your home folder.
+  Before, the Python engine did not expand `~` and wrote into a literal `~`
+  folder under the working directory, so Stata then failed with r(601) or
+  silently loaded an older file of the same name from the home folder.
+
+---
+
 ## Author and license
 
 Eric A. Booth, Sr Researcher, Texas 2036 (eric.a.booth@gmail.com). MIT-licensed.
@@ -504,7 +517,7 @@ options you passed, and the message you got is enough to work from.
 If this package supports published work, please cite it:
 
 > Booth, E. A. (2026). *ercotapi: ERCOT Public API data in Stata* (version
-> 1.0.0) [Stata package]. https://github.com/ericabooth/ercotapi-stata-public
+> 1.0.1) [Stata package]. https://github.com/ericabooth/ercotapi-stata-public
 
 The data are ERCOT's and their terms govern their use. This package is an
 independent client and carries no endorsement from ERCOT.

@@ -1,4 +1,4 @@
-*! ercotapi v1.0.0  2026-09-20
+*! ercotapi v1.0.1  2026-11-09
 *! Pull Texas grid data from the ERCOT Public API straight into Stata.
 *!
 *! Eric A. Booth, Sr Researcher, Texas 2036.  MIT licensed.  See ercotapi.sthlp
@@ -24,6 +24,12 @@
 *!     Never stored in this package, never typed as a Stata argument, and never
 *!     shown in full.  Run -ercotapi setup, template- once and paste your three
 *!     values into the file it creates.
+*!
+*! CHANGES
+*!     1.0.1  2026-11-09  saving() expands a leading ~ to the home folder and
+*!            makes a relative name absolute before Stata or Python touch it.
+*!            Python wrote a literal ./~/ folder before, so Stata then failed
+*!            with r(601) or loaded an older file sitting in the home folder.
 
 program define ercotapi
     version 16.0
@@ -67,7 +73,7 @@ end
 program define ercotapi_version, rclass
     version 16.0
     syntax [, *]
-    display as text "ercotapi version 1.0.0 (2026-09-20)"
+    display as text "ercotapi version 1.0.1 (2026-11-09)"
     capture ercotapi_findfile, quietly
     if !_rc display as text "  Python engine: " as result "`r(dir)'"
     capture ercotapi_python
@@ -76,7 +82,7 @@ program define ercotapi_version, rclass
         local pyshow : subinstr local pyv `"""' "", all
         display as text "  Python:        " as result `"`pyshow'"' as text "  (`r(pyver)')"
     }
-    return local version "1.0.0"
+    return local version "1.0.1"
 end
 
 
@@ -163,7 +169,8 @@ program define ercotapi_catalog, rclass
     tempfile log tmpcsv
     local csv `"`tmpcsv'"'
     if `"`saving'"' != "" {
-        local csv `"`saving'"'
+        ercotapi_fullpath, file(`"`saving'"')
+        local csv `"`r(path)'"'
         ercotapi_checksaving, file(`"`csv'"') replace("`replace'")
     }
 
@@ -245,7 +252,8 @@ program define ercotapi_archive, rclass
     tempfile log tmpcsv
     local csv `"`tmpcsv'"'
     if `"`saving'"' != "" {
-        local csv `"`saving'"'
+        ercotapi_fullpath, file(`"`saving'"')
+        local csv `"`r(path)'"'
         ercotapi_checksaving, file(`"`csv'"') replace("`replace'")
     }
 
@@ -299,7 +307,7 @@ program define ercotapi_archive, rclass
         capture label variable doc_id        "Archive document id"
         capture label variable friendly_name "ERCOT's name for the posted file"
         capture label variable post_datetime "When ERCOT published it"
-        notes _dta: ERCOT archive listing for `emil'; retrieved `c(current_date)' by ercotapi 1.0.0
+        notes _dta: ERCOT archive listing for `emil'; retrieved `c(current_date)' by ercotapi 1.0.1
         display as text "ercotapi archive: listed " as result "`=_N'" as text " postings."
         display as text "  post_datetime is when ERCOT published each file. Sort on it to see how"
         display as text "  far back the archive goes, then download a window with from() and to()."
@@ -316,7 +324,7 @@ program define ercotapi_archive, rclass
     else {
         capture label variable source_doc_id        "Archive document this row came from"
         capture label variable source_post_datetime "When ERCOT published that document"
-        notes _dta: ERCOT archive for `emil', posted `from' to `to'; retrieved `c(current_date)' by ercotapi 1.0.0
+        notes _dta: ERCOT archive for `emil', posted `from' to `to'; retrieved `c(current_date)' by ercotapi 1.0.1
         display as text "ercotapi archive: loaded " as result "`=_N'" as text " rows, " ///
             as result "`=c(k)'" as text " variables."
         display as text "  Column names are ERCOT's own, kept as the posted file had them."
@@ -351,7 +359,8 @@ program define ercotapi_describe, rclass
     tempfile log tmpcsv
     local csv `"`tmpcsv'"'
     if `"`saving'"' != "" {
-        local csv `"`saving'"'
+        ercotapi_fullpath, file(`"`saving'"')
+        local csv `"`r(path)'"'
         ercotapi_checksaving, file(`"`csv'"') replace("`replace'")
     }
 
@@ -444,7 +453,8 @@ program define ercotapi_pull, rclass
     tempfile log tmpcsv
     local csv `"`tmpcsv'"'
     if `"`saving'"' != "" {
-        local csv `"`saving'"'
+        ercotapi_fullpath, file(`"`saving'"')
+        local csv `"`r(path)'"'
         ercotapi_checksaving, file(`"`csv'"') replace("`replace'")
     }
 
@@ -498,7 +508,7 @@ program define ercotapi_pull, rclass
     char _dta[ercotapi_pulled]   "`c(current_date)' `c(current_time)'"
     local prov "ERCOT Public API, report `emil', table `artifact'"
     if `"`field'"' != "" local prov `"`prov', `field' from `from' to `to'"'
-    notes _dta: `prov'; retrieved `c(current_date)' by ercotapi 1.0.0
+    notes _dta: `prov'; retrieved `c(current_date)' by ercotapi 1.0.1
 
     display as text "ercotapi pull: loaded " as result "`=_N'" as text " rows, " ///
         as result "`=c(k)'" as text " variables."
@@ -520,6 +530,53 @@ program define ercotapi_protect_data
         display as error "  save what you have first."
         exit 4
     }
+end
+
+* saving() is used twice: Stata checks it and later imports it, and the
+* Python engine writes it.  Python does not expand a leading ~, so before
+* 1.0.1 it wrote into a literal "~" folder under the working directory while
+* Stata looked in the home folder, and either failed with r(601) or loaded an
+* older file left there.  Resolve the name once, to an absolute path, so both
+* sides see the same file.
+program define ercotapi_fullpath, rclass
+    version 16.0
+    syntax , FILE(string)
+    local f : copy local file
+    local f = trim(`"`macval(f)'"')
+    local c1 = substr(`"`macval(f)'"', 1, 1)
+    local c2 = substr(`"`macval(f)'"', 2, 1)
+
+    * ---- a leading ~ means the home folder --------------------------------
+    if `"`c1'"' == "~" & inlist(`"`c2'"', "", "/", "\") {
+        local home ""
+        if "`c(os)'" == "Windows" {
+            local home : env USERPROFILE
+            if `"`home'"' == "" {
+                local hd : env HOMEDRIVE
+                local hp : env HOMEPATH
+                if `"`hd'"' != "" & `"`hp'"' != "" local home `"`hd'`hp'"'
+            }
+        }
+        if `"`home'"' == "" local home : env HOME
+        if `"`home'"' == "" {
+            display as error "ercotapi: saving() starts with ~, but the home folder is not set"
+            display as error "  in the environment. Give saving() a full path instead."
+            exit 198
+        }
+        if inlist(substr(`"`home'"', -1, 1), "/", "\") {
+            local home = substr(`"`home'"', 1, length(`"`home'"') - 1)
+        }
+        local rest = substr(`"`macval(f)'"', 2, .)
+        local f `"`home'`macval(rest)'"'
+    }
+
+    * ---- a relative name is relative to the working directory -------------
+    local c1 = substr(`"`macval(f)'"', 1, 1)
+    local c2 = substr(`"`macval(f)'"', 2, 1)
+    if !inlist(`"`c1'"', "/", "\") & `"`c2'"' != ":" {
+        local f `"`c(pwd)'/`macval(f)'"'
+    }
+    return local path `"`macval(f)'"'
 end
 
 program define ercotapi_checksaving
