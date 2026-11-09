@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 1.0.1  09nov2026}{...}
+{* *! version 1.0.2  09nov2026}{...}
 {viewerjumpto "Syntax" "ercotapi##syntax"}{...}
 {viewerjumpto "Description" "ercotapi##description"}{...}
 {viewerjumpto "Getting an ERCOT API key" "ercotapi##key"}{...}
@@ -274,12 +274,12 @@ cannot contain spaces.
 {opt pagesize(#)} sets rows per request. The default is 5000, which keeps each
 response a manageable size. ERCOT accepts larger pages, so raising it spends
 fewer requests against the rate limit on a big pull; lowering it only makes a
-pull slower.
+pull slower. It must be 1 or more.
 
 {phang}
 {opt rate(#)} caps requests per minute. The default is 25. ERCOT throttles by
 account, so lower it if you share an account with a colleague or another
-script.
+script. It must be 1 or more.
 
 {phang}
 {opt clear} replaces the data in memory. Required unless {opt noimport} is
@@ -314,7 +314,9 @@ dates, that is the full span, which tells you how far back the report goes.
 {opt maxdocs(#)} caps how many postings a single call will handle. The default
 is 400 for a download and 2000 for a listing. Each posting is a separate
 request, so the ceiling exists to stop an accidental year-long window from
-running for an hour.
+running for an hour. It must be 1 or more. {opt rate()}, {opt pagesize()} and
+{opt maxdocs()} are checked before anything is sent, and a value below 1 stops
+with error 198.
 
 {phang2}
 The two paths hit that ceiling differently. A {it:download} above the ceiling
@@ -333,7 +335,10 @@ narrow the dates, before reading that count as the whole archive.
 {opt python(string)} names the Python interpreter to use, for the case where
 several are installed and the first one found is not the one you want. To set
 it for a whole session instead, use
-{cmd:global ercotapi_python "/full/path/to/python3"}.
+{cmd:global ercotapi_python "/full/path/to/python3"}. A leading {cmd:~} in
+either is expanded to your home folder. An interpreter you name is used or
+refused: if it does not run, {cmd:ercotapi} stops with error 601 and names it,
+rather than quietly using a different Python.
 
 {phang}
 {opt verbose} shows the exact command line being run and the receipt that came
@@ -547,6 +552,20 @@ Python 3.8 or newer, or set
 {cmd:global ercotapi_python "/full/path/to/python3"}.
 
 {phang}
+{bf:the interpreter named in python() did not run}, or
+{bf:global ercotapi_python names an interpreter that did not run}{break}
+The path you gave is not a working Python. Correct it, or leave
+{opt python()} out (and clear the global with
+{cmd:global ercotapi_python ""}) to let {cmd:ercotapi} search.
+
+{phang}
+{bf:could not reach ERCOT}{break}
+The machine is offline, or a proxy or firewall blocks {cmd:api.ercot.com} or
+{cmd:ercotb2c.b2clogin.com}. Check the connection and any {cmd:HTTPS_PROXY}
+setting, then rerun. {cmd:ercotapi setup, offline} checks everything that does
+not need the network.
+
+{phang}
 {bf:the Python engine files could not be found or downloaded}{break}
 The engine did not arrive with the install, or only half of it did. Reinstall
 with the {cmd:net install} line under
@@ -633,7 +652,9 @@ Working from a clone instead:
 {pstd}
 If a machine cannot reach GitHub at all, mirror the repository and set
 {cmd:global ercotapi_remote_base "https://your.mirror/ercotapi/"} before the
-first call.
+first call. Engine files fetched this way (or from GitHub, when an install
+arrived without them) are kept only if they report the same version as the
+installed {cmd:ercotapi}; otherwise reinstall, which brings both back in step.
 
 
 {marker author}{...}
@@ -650,7 +671,7 @@ options you passed, and the message you got is enough to work from.
 
 {pstd}
 If this package supports published work, please cite it as: Booth, E. A.
-(2026). {it:ercotapi: ERCOT Public API data in Stata} (version 1.0.1) [Stata
+(2026). {it:ercotapi: ERCOT Public API data in Stata} (version 1.0.2) [Stata
 package]. {browse "https://github.com/ericabooth/ercotapi-stata-public"}
 
 

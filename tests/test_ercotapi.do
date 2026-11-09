@@ -114,6 +114,59 @@ local bare2 : subinstr local again `"""' "", all
 tcheck `=("`bare2'" == "`bare'")' "a hand-set interpreter path round-trips through the search"
 global ercotapi_python ""
 
+* An interpreter the user names is used or refused. Falling through to
+* python3 without a word would run a different Python from the one asked for.
+capture noisily ercotapi_python, python("/no/such/folder/python3")
+tcheck `=(_rc == 601)' "python() naming an interpreter that does not run is an error"
+global ercotapi_python "/no/such/folder/python3"
+capture noisily ercotapi_python
+tcheck `=(_rc == 601)' "global ercotapi_python naming one that does not run is an error"
+global ercotapi_python ""
+capture ercotapi_python
+tcheck `=(_rc == 0)' "with the global cleared the search works again"
+* what the search returns can be handed straight back through python()
+local found `"`r(python)'"'
+capture ercotapi_python, python(`"`found'"')
+tcheck `=(_rc == 0)' "r(python) can be passed back through python()"
+global ercotapi_python ""
+
+* The ado, the engine and the engine check in ercotapi_findfile carry one
+* version between them. A release that bumps one and not the others would
+* make the last-resort download refuse its own files.
+* (The files are read in Mata: source code holds quote sequences that a Stata
+* macro cannot carry safely.)
+capture mata: mata drop _tv_grab()
+mata:
+string scalar _tv_grab(string scalar fn, string scalar pattern)
+{
+    real scalar   fh
+    string scalar v
+    string matrix line
+
+    v  = ""
+    fh = _fopen(fn, "r")
+    if (fh < 0) return("")
+    while ((line = fget(fh)) != J(0, 0, "")) {
+        if (regexm(line, pattern)) {
+            v = regexs(1)
+            break
+        }
+    }
+    fclose(fh)
+    return(v)
+}
+end
+quietly ercotapi version
+local adover "`r(version)'"
+quietly ercotapi_findfile
+local engfile `"`r(dir)'_ercotapi_client.py"'
+mata: st_local("engver", _tv_grab(st_local("engfile"), "^__version__ *= *.([0-9][0-9A-Za-z.]*)"))
+tcheck `=("`engver'" == "`adover'")' "the engine reports the same version as the ado (`adover')"
+quietly findfile ercotapi_findfile.ado
+local ffile `"`r(fn)'"'
+mata: st_local("wantver", _tv_grab(st_local("ffile"), "^ *local want +.([0-9][0-9A-Za-z.]*)"))
+tcheck `=("`wantver'" == "`adover'")' "ercotapi_findfile expects that same engine version"
+
 
 * ===========================================================================
 tsection "2. Bad input is refused before a request is spent"
@@ -141,6 +194,16 @@ tcheck `=(_rc == 198)' "archive refuses a download with no date window"
 
 capture noisily ercotapi pull np4-190-cd, artifact(dam_stlmnt_pnt_prices) noimport
 tcheck `=(_rc == 198)' "noimport without saving is refused"
+
+* A count of zero is a typing slip, not a request for the default.
+capture noisily ercotapi pull np4-190-cd, artifact(dam_stlmnt_pnt_prices) pagesize(0) clear
+tcheck `=(_rc == 198)' "pagesize(0) is refused"
+capture noisily ercotapi archive np4-190-cd, list maxdocs(0) clear
+tcheck `=(_rc == 198)' "maxdocs(0) is refused, not read as the default"
+capture noisily ercotapi catalog, rate(0) clear
+tcheck `=(_rc == 198)' "rate(0) is refused"
+capture noisily ercotapi describe np4-190-cd, rate(-5) clear
+tcheck `=(_rc == 198)' "a negative rate() is refused"
 
 * A command that would replace the data has to say so first.
 quietly set obs 10

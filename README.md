@@ -95,6 +95,10 @@ the package there before your first call:
 global ercotapi_remote_base "https://your.mirror/ercotapi/"
 ```
 
+Engine files fetched this way (or from GitHub, when an install arrived without
+them) are kept only if they report the same version as the installed
+`ercotapi`. If they do not, reinstall, which brings both back in step.
+
 ---
 
 ## Getting an ERCOT API key
@@ -393,7 +397,7 @@ char list _dta[]
 _dta:
   1.  ERCOT Public API, report np4-190-cd, table dam_stlmnt_pnt_prices,
       deliveryDate from 2026-09-19 to 2026-09-19; retrieved 20 Sep 2026 by
-      ercotapi 1.0.1
+      ercotapi 1.0.2
 ```
 
 Save the `.dta` and the note travels with it, which means a file found on a
@@ -438,6 +442,9 @@ python3 _ercotapi_cli.py pull --emil np4-190-cd --artifact dam_stlmnt_pnt_prices
 | What you see | What it means | What to do |
 |---|---|---|
 | `no working Python 3 interpreter was found` | Python is missing, or it is installed somewhere Stata's shell does not look. | Install Python 3.8+, or set `global ercotapi_python "/full/path/to/python3"`. |
+| `the interpreter named in python() did not run`, or `global ercotapi_python names an interpreter that did not run` | The path you gave is not a working Python. A named interpreter is used or refused, never silently swapped for another. | Correct the path (a leading `~` is fine), or leave `python()` out and clear the global with `global ercotapi_python ""`. |
+| `could not reach ERCOT` | The machine is offline, or a proxy or firewall blocks `api.ercot.com` or `ercotb2c.b2clogin.com`. | Check the connection and any `HTTPS_PROXY` setting, then rerun. `ercotapi setup, offline` checks everything that does not need the network. |
+| `rate() must be a positive whole number` (or `pagesize()`, `maxdocs()`) | The option was 0 or negative. | Give 1 or more, or leave the option out for the default. |
 | `the Python engine files could not be found or downloaded` | The engine did not arrive with the install, or only half of it did. | Re-run the `net install` line at the top, or clone the repo and `adopath ++` it. |
 | `No ERCOT credentials found` | Neither the environment variables nor the credentials file is set. | Run `ercotapi setup, template` and fill in the file. |
 | `ERCOT rejected the sign-in (HTTP 400)` | Wrong username or password. This is about the account, not the key. | Sign in at apiexplorer.ercot.com by hand to confirm the password, then update the credentials file. |
@@ -450,6 +457,13 @@ python3 _ercotapi_cli.py pull --emil np4-190-cd --artifact dam_stlmnt_pnt_prices
 
 Add `verbose` to any command to see the exact command line being run and the
 receipt that came back.
+
+### Stored results
+
+`ercotapi catalog`, `ercotapi pull` and `ercotapi archive` store `r(N)`, the
+number of rows loaded (0 if the query returned none). `ercotapi version` stores
+`r(version)`. `ercotapi setup` stores `r(status)`: `ok`, `template`, `offline`
+or `failed`.
 
 ### About rate limits, and how long an archive pull takes
 
@@ -497,6 +511,16 @@ The rest stays in the repository and is not copied to your adopath:
 
 ## Changes
 
+- 1.0.2 (9 Nov 2026): an interpreter named in `python()` or
+  `global ercotapi_python` that does not run is now an error naming it; before,
+  the search fell through to `python3` without a word. A leading `~` in either
+  is expanded. `rate()`, `pagesize()` and `maxdocs()` below 1 stop with r(198)
+  before any request (`maxdocs(0)` used to mean the default). CSV imports use
+  `bindquote(strict)`, so a text field holding a line break stays in one row.
+  A network failure prints one line instead of a Python traceback, and a failed
+  request shows its error once. `setup, template` makes the `~/.ercotapi`
+  folder private (0700). Engine files fetched as a last resort are kept only
+  when their version matches the installed package.
 - 1.0.1 (9 Nov 2026): `saving("~/file.csv")` now writes to your home folder.
   Before, the Python engine did not expand `~` and wrote into a literal `~`
   folder under the working directory, so Stata then failed with r(601) or
@@ -517,7 +541,7 @@ options you passed, and the message you got is enough to work from.
 If this package supports published work, please cite it:
 
 > Booth, E. A. (2026). *ercotapi: ERCOT Public API data in Stata* (version
-> 1.0.1) [Stata package]. https://github.com/ericabooth/ercotapi-stata-public
+> 1.0.2) [Stata package]. https://github.com/ericabooth/ercotapi-stata-public
 
 The data are ERCOT's and their terms govern their use. This package is an
 independent client and carries no endorsement from ERCOT.

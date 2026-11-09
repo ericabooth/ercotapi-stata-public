@@ -7,8 +7,10 @@ to this script and then imports the CSV it writes. Keeping the boundary at
 "write a CSV, print a one-line receipt" means the Stata side never has to
 parse JSON and the Python side never has to know about Stata.
 
-Every subcommand prints a single line starting with OK: or ERROR: as its last
-line, which is what the .ado reads to decide whether to continue.
+Every subcommand prints a single line starting with OK: or ERROR:, which is
+what the .ado reads to decide whether to continue. On success it is the last
+line. On failure the ERROR: line comes first and any explanation follows it,
+indented, so the reader sees the headline once and then what to do.
 
 SUBCOMMANDS
     template                    write an empty credentials file for you to fill in
@@ -31,7 +33,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socket
 import sys
+import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _ercotapi_client import (  # noqa: E402
@@ -60,7 +64,12 @@ def cmd_template(args) -> int:
         print("Refusing to overwrite it. Open it in a text editor to change the values.")
         print(f"OK: {CRED_PATH} already exists and was left alone")
         return 0
-    os.makedirs(os.path.dirname(CRED_PATH), exist_ok=True)
+    cred_dir = os.path.dirname(CRED_PATH)
+    os.makedirs(cred_dir, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(cred_dir, 0o700)  # the folder holds a password: owner only
+    except OSError:
+        pass
     skeleton = {"api_key": "", "username": "", "password": ""}
     with open(CRED_PATH, "w", encoding="utf-8") as fh:
         json.dump(skeleton, fh, indent=2)
@@ -271,10 +280,24 @@ def main() -> int:
     try:
         return args.func(args)
     except (ErcotAuthError, ErcotApiError) as exc:
-        # The full text explains what to do about it; the last line is the
-        # receipt the Stata side reads, so it has to be one line and last.
-        print(str(exc))
-        print(f"ERROR: {str(exc).splitlines()[0]}")
+        # The receipt is the headline, printed once; the rest of the text
+        # explains what to do about it. The explanation is indented so no line
+        # of it can be mistaken for an OK:/ERROR: receipt.
+        lines = str(exc).splitlines() or [type(exc).__name__]
+        print(f"ERROR: {lines[0]}")
+        for extra in lines[1:]:
+            print(f"  {extra}")
+        return 1
+    except urllib.error.HTTPError as exc:
+        # ERCOT answered, but with an error status the client did not expect.
+        print(f"ERROR: ERCOT answered HTTP {exc.code} ({exc.reason})")
+        return 1
+    except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError) as exc:
+        # No network, a proxy, or a firewall: one plain line, not a traceback.
+        reason = getattr(exc, "reason", None) or exc
+        print(f"ERROR: could not reach ERCOT ({reason})")
+        print("  Check this machine's internet connection, and any proxy (HTTPS_PROXY)")
+        print("  or firewall that blocks api.ercot.com or ercotb2c.b2clogin.com.")
         return 1
     except Exception as exc:  # noqa: BLE001
         import traceback

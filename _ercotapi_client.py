@@ -87,7 +87,7 @@ import urllib.request
 import zipfile
 from typing import Any, Dict, List, Optional
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 # These three are ERCOT's own public settings, identical for every user of the
 # API. They are configuration, not secrets, and are published in ERCOT's

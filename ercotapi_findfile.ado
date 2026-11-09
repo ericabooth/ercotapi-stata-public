@@ -1,4 +1,4 @@
-*! ercotapi_findfile v1.0.1  2026-09-20
+*! ercotapi_findfile v1.0.2  2026-11-09
 *! Locate the two Python helper files that ercotapi drives.
 *!
 *! Stata 16 and later file a package's .py files under sysdir PLUS/py/, and
@@ -12,6 +12,9 @@
 *! as missing rather than used, since importing a stale client would be worse
 *! than reporting the engine as absent.
 *!
+*! v1.0.2: pass 3 keeps a downloaded engine only when it reports the same
+*!         version as this package, so an older ado never runs whatever
+*!         the main branch holds that day.
 *! v1.0.1: search PLUS/py/ and PERSONAL/py/ explicitly in pass 2.  Pass 1
 *!         already finds them there through -findfile-, but an installation
 *!         that has been moved or partially copied may not be on the adopath.
@@ -25,6 +28,9 @@ program define ercotapi_findfile, rclass
 
     local cli    "_ercotapi_cli.py"
     local client "_ercotapi_client.py"
+    * the engine version this ado belongs with (kept in step with ercotapi.ado
+    * and __version__ in _ercotapi_client.py; tests/test_ercotapi.do checks it)
+    local want   "1.0.2"
 
     * ---- pass 1: the adopath, which is where net install puts them ---------
     local dir ""
@@ -57,6 +63,12 @@ program define ercotapi_findfile, rclass
     * Set global ercotapi_remote_base (a URL or a local folder, with a
     * trailing slash) to point this somewhere else, such as an internal mirror
     * or a clone on a shared drive.
+    *
+    * The main branch moves on, so what is fetched is checked before it is
+    * used: the client must report the version this ado was written for.  A
+    * different version is removed again and the reinstall message below is
+    * shown, because reinstalling brings the ado and the engine back in step.
+    local mismatch ""
     if "`dir'" == "" {
         local remote "$ercotapi_remote_base"
         if "`remote'" == "" {
@@ -71,11 +83,28 @@ program define ercotapi_findfile, rclass
             capture copy "`remote'`f'" "`dest'`f'", replace
             if _rc local ok 0
         }
+        if `ok' {
+            * read in Mata: Python source holds quote sequences that a
+            * Stata macro cannot carry safely
+            local got ""
+            capture mata: st_local("got", _ercotapi_engver(st_local("dest") + st_local("client")))
+            if "`got'" != "`want'" {
+                local ok 0
+                local mismatch "`got'"
+                if "`mismatch'" == "" local mismatch "unknown"
+                capture erase "`dest'`cli'"
+                capture erase "`dest'`client'"
+            }
+        }
         if `ok' local dir "`dest'"
     }
 
     if "`dir'" == "" {
         display as error "ercotapi: the Python engine files could not be found or downloaded."
+        if "`mismatch'" != "" {
+            display as error "  The copy at `remote' is version `mismatch', but this ercotapi is `want',"
+            display as error "  so it was not used."
+        }
         display as error "  ercotapi needs `cli' and `client' together in one folder."
         display as error "  Reinstalling puts them there, so start with:"
         display as error `"    net install ercotapi, from("https://raw.githubusercontent.com/ericabooth/ercotapi-stata-public/main/") replace force"'
@@ -87,4 +116,27 @@ program define ercotapi_findfile, rclass
 
     return local dir     "`dir'"
     return local clipath "`dir'`cli'"
+end
+
+mata:
+// the version an engine file reports: the value on its  __version__ = "x.y.z"
+// line, or "" when the file cannot be read or has no such line
+string scalar _ercotapi_engver(string scalar fn)
+{
+    real scalar   fh
+    string scalar v
+    string matrix line
+
+    v  = ""
+    fh = _fopen(fn, "r")
+    if (fh < 0) return("")
+    while ((line = fget(fh)) != J(0, 0, "")) {
+        if (regexm(line, "^__version__ *= *.([0-9][0-9A-Za-z.]*)")) {
+            v = regexs(1)
+            break
+        }
+    }
+    fclose(fh)
+    return(v)
+}
 end

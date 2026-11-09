@@ -1,12 +1,13 @@
-*! ercotapi_shell v1.0.0  2026-09-20
+*! ercotapi_shell v1.0.2  2026-11-09
 *! Run one _ercotapi_cli.py subcommand and read back its result.
 *!
 *! Stata's -shell- hands a command to the operating system and does not report
 *! whether that command succeeded, so this program does not rely on an exit
-*! status.  Instead the Python side ends every run with a single receipt line
-*! that starts with OK: or ERROR:, and everything the run printed is captured
-*! to a log file that the caller supplies.  This program finds the receipt and
-*! reports it back.
+*! status.  Instead the Python side prints a single receipt line that starts
+*! with OK: or ERROR: (last on success; first, with any explanation indented
+*! under it, on failure), and everything the run printed is captured to a log
+*! file that the caller supplies.  This program finds the receipt and reports
+*! it back.
 *!
 *! The caller passes an argument string that is already quoted for the shell.
 *!

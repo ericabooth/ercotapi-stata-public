@@ -1,4 +1,4 @@
-*! ercotapi_python v1.0.0  2026-09-20
+*! ercotapi_python v1.0.2  2026-11-09
 *! Work out which Python interpreter to use, and prove it runs.
 *!
 *! ercotapi needs a Python 3 interpreter on the machine, but it does not need
@@ -10,6 +10,12 @@
 *!     2. global ercotapi_python, if you set one
 *!     3. whatever Stata's own Python integration already points at
 *!     4. python3, then python, then (on Windows) the py launcher
+*!
+*! An interpreter you name yourself, with python() or by setting the global,
+*! is used or refused: if it does not answer, this program stops with an
+*! error naming it rather than quietly falling through to python3 (v1.0.2).
+*! A leading ~ in either is expanded from HOME (USERPROFILE on Windows),
+*! because the shell never sees it unquoted.
 *!
 *! Each candidate is tried by running a one-line program and reading back what
 *! it printed, because Stata's -shell- does not report the exit status of the
@@ -30,12 +36,32 @@ program define ercotapi_python, rclass
     * is deliberately left bare because "py -3" is a program plus an argument,
     * not a path.
     local k 0
+    * nexpl = how many leading candidates the user named (python() or the
+    * global); those are never fallen through silently.
+    local nexpl 0
     if `"`python'"' != "" {
-        local k = `k' + 1
-        local c`k' `""`python'""'
+        * A value that is already shell-ready (quoted, or one of the bare
+        * names the search itself returns) is used as given, so a caller can
+        * hand back r(python) unchanged.  Anything else is a path: expand a
+        * leading ~ and quote it.
+        if substr(`"`python'"', 1, 1) == `"""' | inlist(`"`python'"', "python3", "python", "py -3") {
+            local k = `k' + 1
+            local c`k' `"`python'"'
+        }
+        else {
+            _ercotapi_py_tilde `"`python'"'
+            local python `"`r(path)'"'
+            local k = `k' + 1
+            local c`k' `""`python'""'
+        }
+        local nexpl `k'
     }
     local g `"$ercotapi_python"'
-    if `"`g'"' != "" {
+    if `"`g'"' != "" & `nexpl' == 0 {
+        if substr(`"`g'"', 1, 1) != `"""' {
+            _ercotapi_py_tilde `"`g'"'
+            local g `"`r(path)'"'
+        }
         * A value this program stored earlier is already shell-ready. A value
         * the user typed by hand is usually a bare path, and this author's own
         * machines have spaces in nearly every path, so an unquoted one would
@@ -49,6 +75,7 @@ program define ercotapi_python, rclass
         }
         local k = `k' + 1
         local c`k' `"`g'"'
+        local nexpl `k'
     }
     * If Stata's own Python integration is already pointed at an interpreter,
     * reuse it: the user has already told Stata which Python they want.
@@ -99,6 +126,19 @@ program define ercotapi_python, rclass
                     file close `fh'
                 }
             }
+            if `"`winner'"' == "" & `i' <= `nexpl' {
+                * an interpreter the user named did not answer: say so and stop
+                local show : subinstr local cand `"""' "", all
+                if `"`python'"' != "" {
+                    display as error `"ercotapi: the interpreter named in python() did not run: `show'"'
+                    display as error "  Check the path, or leave python() out to let ercotapi search."
+                }
+                else {
+                    display as error `"ercotapi: global ercotapi_python names an interpreter that did not run: `show'"'
+                    display as error `"  Fix it, or clear it to let ercotapi search:  global ercotapi_python """'
+                }
+                exit 601
+            }
         }
     }
 
@@ -133,4 +173,31 @@ program define ercotapi_python, rclass
     global ercotapi_python `"`winner'"'
     return local python `"`winner'"'
     return local pyver   "`winver'"
+end
+
+
+* Expand a leading ~ (alone, or followed by / or a backslash) from HOME, or on
+* Windows from USERPROFILE (HOMEDRIVE+HOMEPATH as a last resort).  Anything
+* else comes back unchanged.
+program define _ercotapi_py_tilde, rclass
+    version 16.0
+    args path
+    local p `"`macval(path)'"'
+    if substr(`"`p'"', 1, 1) == "~" & inlist(substr(`"`p'"', 2, 1), "", "/", "\") {
+        local home : env HOME
+        if "`c(os)'" == "Windows" {
+            local up : env USERPROFILE
+            if `"`up'"' != "" local home `"`up'"'
+            if `"`home'"' == "" {
+                local hd : env HOMEDRIVE
+                local hp : env HOMEPATH
+                local home `"`hd'`hp'"'
+            }
+        }
+        if `"`home'"' != "" {
+            local rest = substr(`"`p'"', 2, .)
+            local p `"`home'`rest'"'
+        }
+    }
+    return local path `"`p'"'
 end

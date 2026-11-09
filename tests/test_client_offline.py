@@ -26,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 import _ercotapi_client as C  # noqa: E402
+import _ercotapi_cli as CLI  # noqa: E402
 
 
 class TestParseRows(unittest.TestCase):
@@ -329,6 +330,64 @@ class TestRateLimiter(unittest.TestCase):
         # Window full: wait for the oldest call to age out.
         full = [now - 59.0 + i * 0.5 for i in range(60)]
         self.assertGreater(lim._sleep_needed(full, now), 0)
+
+
+class TestCliFailures(unittest.TestCase):
+    """A failed run prints its ERROR: line once, and never a traceback for a
+    plain network failure."""
+
+    def _run(self, raiser):
+        import contextlib
+        import urllib.error  # noqa: F401
+        saved_argv, saved_check = sys.argv, CLI.cmd_check
+        CLI.cmd_check = raiser
+        sys.argv = ["_ercotapi_cli.py", "check"]
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = CLI.main()
+        finally:
+            sys.argv, CLI.cmd_check = saved_argv, saved_check
+        return rc, buf.getvalue().splitlines()
+
+    def test_a_network_failure_is_one_line_not_a_traceback(self):
+        import urllib.error
+
+        def boom(args):
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+
+        rc, lines = self._run(boom)
+        self.assertEqual(rc, 1)
+        self.assertTrue(lines[0].startswith("ERROR: could not reach ERCOT"))
+        self.assertEqual(sum(1 for ln in lines if ln.startswith("ERROR:")), 1)
+        self.assertFalse(any("Traceback" in ln for ln in lines))
+
+    def test_an_explained_error_shows_its_headline_once(self):
+        def boom(args):
+            raise C.ErcotAuthError("No ERCOT credentials found.\nSet them like this.")
+
+        rc, lines = self._run(boom)
+        self.assertEqual(rc, 1)
+        self.assertEqual(lines[0], "ERROR: No ERCOT credentials found.")
+        self.assertEqual(sum(1 for ln in lines if "No ERCOT credentials found." in ln), 1)
+        self.assertEqual(lines[1], "  Set them like this.")
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_template_makes_the_folder_and_file_private(self):
+        import contextlib
+        import stat
+        saved = CLI.CRED_PATH
+        with tempfile.TemporaryDirectory() as tmp:
+            CLI.CRED_PATH = os.path.join(tmp, ".ercotapi", "credentials.json")
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(CLI.cmd_template(None), 0)
+                dmode = stat.S_IMODE(os.stat(os.path.dirname(CLI.CRED_PATH)).st_mode)
+                fmode = stat.S_IMODE(os.stat(CLI.CRED_PATH).st_mode)
+            finally:
+                CLI.CRED_PATH = saved
+        self.assertEqual(dmode, 0o700)
+        self.assertEqual(fmode, 0o600)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-*! ercotapi v1.0.1  2026-11-09
+*! ercotapi v1.0.2  2026-11-09
 *! Pull Texas grid data from the ERCOT Public API straight into Stata.
 *!
 *! Eric A. Booth, Sr Researcher, Texas 2036.  MIT licensed.  See ercotapi.sthlp
@@ -26,6 +26,16 @@
 *!     values into the file it creates.
 *!
 *! CHANGES
+*!     1.0.2  2026-11-09  CSV imports use bindquote(strict), so a text field
+*!            holding a line break stays in one row.  rate(), pagesize() and
+*!            maxdocs() below 1 stop with r(198) before any request.  python()
+*!            or global ercotapi_python naming an interpreter that does not run
+*!            is an error, not a silent fall-through; a leading ~ in either is
+*!            expanded.  A network failure prints one line, not a traceback,
+*!            and a failed request shows its error once.  setup, template
+*!            makes the ~/.ercotapi folder private (0700).  Engine files
+*!            fetched as a last resort are kept only when their version
+*!            matches this one.
 *!     1.0.1  2026-11-09  saving() expands a leading ~ to the home folder and
 *!            makes a relative name absolute before Stata or Python touch it.
 *!            Python wrote a literal ./~/ folder before, so Stata then failed
@@ -73,7 +83,7 @@ end
 program define ercotapi_version, rclass
     version 16.0
     syntax [, *]
-    display as text "ercotapi version 1.0.1 (2026-11-09)"
+    display as text "ercotapi version 1.0.2 (2026-11-09)"
     capture ercotapi_findfile, quietly
     if !_rc display as text "  Python engine: " as result "`r(dir)'"
     capture ercotapi_python
@@ -82,7 +92,7 @@ program define ercotapi_version, rclass
         local pyshow : subinstr local pyv `"""' "", all
         display as text "  Python:        " as result `"`pyshow'"' as text "  (`r(pyver)')"
     }
-    return local version "1.0.1"
+    return local version "1.0.2"
 end
 
 
@@ -161,6 +171,7 @@ end
 program define ercotapi_catalog, rclass
     version 16.0
     syntax [, CLEAR SAVING(string) REPLACE RATE(integer 25) PYTHON(string) VERBOSE]
+    ercotapi_posint, name(rate) value(`rate')
 
     ercotapi_protect_data, clear("`clear'")
     ercotapi_findfile
@@ -188,7 +199,7 @@ program define ercotapi_catalog, rclass
         exit 0
     }
 
-    quietly import delimited using `"`csv'"', varnames(1) case(preserve) clear
+    quietly import delimited using `"`csv'"', varnames(1) case(preserve) bindquote(strict) clear
     capture label variable emil_id      "Report id, as ERCOT numbers it"
     capture label variable name         "Report name"
     capture label variable artifact     "Table inside the report; pass to pull, artifact()"
@@ -226,9 +237,13 @@ program define ercotapi_archive, rclass
         display as error `"    ercotapi archive np4-190-cd, from(2024-03-01) to(2024-03-07) clear"'
         exit 198
     }
-    syntax , [ FROM(string) TO(string) LIST MAXDOCS(integer 0) CLEAR      ///
+    syntax , [ FROM(string) TO(string) LIST MAXDOCS(integer -999) CLEAR   ///
                SAVING(string) REPLACE NOIMPORT STRINGCOLS(string)         ///
                RATE(integer 25) PYTHON(string) VERBOSE ]
+    * -999 marks "not given", so an explicit maxdocs(0) is caught, not
+    * quietly read as the default
+    ercotapi_posint, name(rate) value(`rate')
+    if `maxdocs' != -999 ercotapi_posint, name(maxdocs) value(`maxdocs')
 
     if "`noimport'" == "" ercotapi_protect_data, clear("`clear'")
     if "`noimport'" != "" & `"`saving'"' == "" {
@@ -258,12 +273,12 @@ program define ercotapi_archive, rclass
     }
 
     if "`list'" != "" {
-        local md = cond(`maxdocs' > 0, `maxdocs', 2000)
+        local md = cond(`maxdocs' != -999, `maxdocs', 2000)
         local a `""`cli'" --rate `rate' archive-list --emil "`emil'" --out "`csv'" --max-docs `md'"'
         if `"`from'"' != "" local a `"`a' --from "`from'" --to "`to'""'
     }
     else {
-        local md = cond(`maxdocs' > 0, `maxdocs', 400)
+        local md = cond(`maxdocs' != -999, `maxdocs', 400)
         local a `""`cli'" --rate `rate' archive-pull --emil "`emil'" --out "`csv'""'
         local a `"`a' --from "`from'" --to "`to'" --max-docs `md'"'
         display as text "ercotapi: downloading the `emil' archive from `from' to `to' ..."
@@ -293,7 +308,8 @@ program define ercotapi_archive, rclass
         exit 0
     }
 
-    local imp `"varnames(1) case(preserve) clear"'
+    * bindquote(strict): a quoted text field may hold a line break
+    local imp `"varnames(1) case(preserve) bindquote(strict) clear"'
     if `"`stringcols'"' != "" local imp `"`imp' stringcols(`stringcols')"'
     quietly import delimited using `"`csv'"', `imp'
 
@@ -307,7 +323,7 @@ program define ercotapi_archive, rclass
         capture label variable doc_id        "Archive document id"
         capture label variable friendly_name "ERCOT's name for the posted file"
         capture label variable post_datetime "When ERCOT published it"
-        notes _dta: ERCOT archive listing for `emil'; retrieved `c(current_date)' by ercotapi 1.0.1
+        notes _dta: ERCOT archive listing for `emil'; retrieved `c(current_date)' by ercotapi 1.0.2
         display as text "ercotapi archive: listed " as result "`=_N'" as text " postings."
         display as text "  post_datetime is when ERCOT published each file. Sort on it to see how"
         display as text "  far back the archive goes, then download a window with from() and to()."
@@ -324,7 +340,7 @@ program define ercotapi_archive, rclass
     else {
         capture label variable source_doc_id        "Archive document this row came from"
         capture label variable source_post_datetime "When ERCOT published that document"
-        notes _dta: ERCOT archive for `emil', posted `from' to `to'; retrieved `c(current_date)' by ercotapi 1.0.1
+        notes _dta: ERCOT archive for `emil', posted `from' to `to'; retrieved `c(current_date)' by ercotapi 1.0.2
         display as text "ercotapi archive: loaded " as result "`=_N'" as text " rows, " ///
             as result "`=c(k)'" as text " variables."
         display as text "  Column names are ERCOT's own, kept as the posted file had them."
@@ -351,6 +367,7 @@ program define ercotapi_describe, rclass
     }
     syntax [, ARTIFACT(string) CLEAR SAVING(string) REPLACE RATE(integer 25) ///
               PYTHON(string) VERBOSE]
+    ercotapi_posint, name(rate) value(`rate')
 
     if "`clear'" != "" ercotapi_protect_data, clear("`clear'")
     ercotapi_findfile
@@ -401,7 +418,7 @@ program define ercotapi_describe, rclass
             }
         }
         if `hasfields' {
-            quietly import delimited using `"`csv'"', varnames(1) case(preserve) clear
+            quietly import delimited using `"`csv'"', varnames(1) case(preserve) bindquote(strict) clear
             display as text "  Field list loaded into memory (`=_N' fields)."
         }
         else {
@@ -430,6 +447,8 @@ program define ercotapi_pull, rclass
              PARAM(string) PAGESIZE(integer 5000) RATE(integer 25)         ///
              CLEAR SAVING(string) REPLACE NOIMPORT STRINGCOLS(string)      ///
              PYTHON(string) VERBOSE ]
+    ercotapi_posint, name(rate) value(`rate')
+    ercotapi_posint, name(pagesize) value(`pagesize')
 
     if "`noimport'" == "" ercotapi_protect_data, clear("`clear'")
     if "`noimport'" != "" & `"`saving'"' == "" {
@@ -494,7 +513,8 @@ program define ercotapi_pull, rclass
         exit 0
     }
 
-    local imp `"varnames(1) case(preserve) clear"'
+    * bindquote(strict): a quoted text field may hold a line break
+    local imp `"varnames(1) case(preserve) bindquote(strict) clear"'
     if `"`stringcols'"' != "" local imp `"`imp' stringcols(`stringcols')"'
     quietly import delimited using `"`csv'"', `imp'
 
@@ -508,7 +528,7 @@ program define ercotapi_pull, rclass
     char _dta[ercotapi_pulled]   "`c(current_date)' `c(current_time)'"
     local prov "ERCOT Public API, report `emil', table `artifact'"
     if `"`field'"' != "" local prov `"`prov', `field' from `from' to `to'"'
-    notes _dta: `prov'; retrieved `c(current_date)' by ercotapi 1.0.1
+    notes _dta: `prov'; retrieved `c(current_date)' by ercotapi 1.0.2
 
     display as text "ercotapi pull: loaded " as result "`=_N'" as text " rows, " ///
         as result "`=c(k)'" as text " variables."
@@ -595,12 +615,16 @@ program define ercotapi_receipt, rclass
     syntax , OK(integer) [RECEIPT(string) LOG(string)]
     if !`ok' {
         display as error ""
+        local typed 0
         if `"`log'"' != "" {
             capture noisily type "`log'"
+            if !_rc local typed 1
         }
         display as error ""
         display as error "ercotapi: the request failed."
-        if `"`receipt'"' != "" display as error `"  `receipt'"'
+        * the log typed above already carries the ERROR: receipt; show it
+        * here only when the log could not be shown
+        if `"`receipt'"' != "" & !`typed' display as error `"  `receipt'"'
         exit 601
     }
     * Receipts from the engine read "wrote <n> rows to <path>" or
@@ -609,4 +633,17 @@ program define ercotapi_receipt, rclass
     if regexm(`"`receipt'"', "wrote ([0-9]+) ") local n = real(regexs(1))
     return scalar nrows = `n'
     return local receipt `"`receipt'"'
+end
+
+
+* ---------------------------------------------------------------------------
+* a numeric option must be a positive integer; checked before any request
+* ---------------------------------------------------------------------------
+program define ercotapi_posint
+    version 16.0
+    syntax , NAME(string) VALUE(integer)
+    if `value' < 1 {
+        display as error "ercotapi: `name'() must be a positive whole number; you gave `value'."
+        exit 198
+    }
 end
